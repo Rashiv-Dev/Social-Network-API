@@ -1,61 +1,79 @@
-// Require Schema and Model
-const { Schema, model } = require("mongoose");
+const User = require("../models/User");
 
-// Require Virtuals and Getters
-const opts = { toJSON: { virtuals: true, getters: true } };
-
-// Set up the User Schema
-const UserSchema = new Schema(
-  {
-    // We will have the following attributes for this
-    // String, Unique, Required, Trimmed
-
-    username: {
-      // We want the type to be a String
-      type: String,
-      // We want this to be a unique username - one that isn't in the database
-      unique: true,
-      // We want this to be trimmed
-      trim: true,
-      // We want a requirement message
-      required: "Please input a username!",
-    },
-    // String, Required, Unique, Must Match a Valid Email (Mongoose Matching Validation)
-    email: {
-      // We want the type to be a String
-      type: String,
-      // We want a requirement message
-      required: "Please input a valid email address!",
-      // We want this to be a unique email
-      unique: true,
-      // Must Match a Valid Email
-      match: [/.+\@.+\..+/, "Please input a valid email address!"],
-    },
-    thoughts: [
-      {
-        // Needs to show an array of _id values referencing the Thought model
-        type: Schema.Types.ObjectId,
-        ref: "Thought",
-      },
-    ],
-
-    friends: [
-      {
-        // Needs of _id values referencing the User model (self-reference)
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
+const userController = {
+  // createUser
+  createUser({ body }, res) {
+    User.create(body)
+      .then((dbUserData) => res.json(dbUserData))
+      .catch((err) => res.status(400).json(err));
   },
-  opts
-);
 
-// CREATE A VIRTUAL
-// friendCount that retrieves the length of the user's friends array field on query
-UserSchema.virtual("friendCount").get(function () {
-  // return the length of the friends value in the model
-  return this.friends.length;
-});
-const User = model("User", UserSchema);
+  // get all users
+  getAllUser(req, res) {
+    User.find({})
+      //displays thoughts
+      .populate({
+        path: "thoughts",
+        select: "-__v",
+      })
+      .select("-__v")
+      .sort({ _id: -1 })
+      .then((dbUserData) => res.json(dbUserData))
+      .catch((err) => {
+        console.log(err);
+        res.status(400).json(err);
+      });
+  },
+  //find user by id
+  getUserById({ params }, res) {
+    User.findOne({ _id: params.id })
+      .populate({
+        path: "thoughts",
+        select: "-__v",
+      })
+      .select("-__v")
+      .then((dbUserData) => {
+        if (!dbUserData) {
+          res.status(404).json({ message: "No user found with this id!" });
+          return;
+        }
+        res.json(dbUserData);
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(400).json(err);
+      });
+  },
 
-module.exports = User;
+  //update user by id
+  // update pizza by id
+  updateUser({ params, body }, res) {
+    User.findOneAndUpdate({ _id: params.id }, body, {
+      new: true,
+      runValidators: true,
+    })
+      .then((dbUserData) => {
+        if (!dbUserData) {
+          res.status(404).json({ message: "No user found with this id!" });
+          return;
+        }
+        res.json(dbUserData);
+      })
+      .catch((err) => res.status(400).json(err));
+  },
+
+  //delete user by id
+  deleteUser({ params }, res) {
+    User.findOneAndDelete({ _id: params.id })
+      .then((dbUserData) => {
+        if (!dbUserData) {
+          res.status(404).json({ message: "No user found with this id!" });
+          return;
+        }
+        res.json(dbUserData);
+      })
+      .catch((err) => res.status(400).json(err));
+  },
+};
+
+module.exports = userController;

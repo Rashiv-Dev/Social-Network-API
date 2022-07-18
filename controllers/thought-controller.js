@@ -1,94 +1,76 @@
-// Require Schema and Model
-const { Schema, model, Types } = require("mongoose");
+const Thoughts = require("../models/Thoughts");
+const User = require("../models/User");
 
-// Require Virtuals and Getters
-const opts = { toJSON: { virtuals: true, getters: true } };
-
-// Require Date Format
-const dateFormat = require("../utils/dateFormat");
-
-// Set up the Reaction Schema
-const reactionSchema = new Schema(
-  {
-    // We will have the following attributes for this
-    // Mongoose's ObjectId data type
-    // Default Value is set to a new ObjectId
-    reactionId: {
-      // NEED  TO CONFIRM //
-      // Use Mongoose's ObjectId data type
-      type: Schema.Types.ObjectId,
-      // Default value is set to a new ObjectId
-      default: () => new Types.ObjectId(),
-      // END CONFIRM //
-    },
-    // We will have the following attributes for this
-    // String, Required, Maximum Length of 280 characters
-    reactionBody: {
-      type: String,
-      required: true,
-      maxlength: 280,
-    },
-    // We will have the following attributes for this
-    // String, Required
-    username: {
-      type: String,
-      required: true,
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-      // TODO: Use a getter method to format the timestamp on query
-      get: (createdAtVal) => dateFormat(createdAtVal),
-    },
+const thoughtController = {
+  addThought({ params, body }, res) {
+    console.log(body);
+    Thoughts.create(body)
+      .then(({ _id }) => {
+        return User.findOneAndUpdate(
+          { _id: body.userId },
+          { $push: { thoughts: _id } },
+          { new: true }
+        );
+      })
+      .then((dbthoughtData) => {
+        if (!dbthoughtData) {
+          res.status(404).json({ message: "No User found with this id" });
+          return;
+        }
+        res.json(dbthoughtData);
+      })
+      .catch((err) => res.json(err));
   },
-  opts
-);
-
-// Set up the Thought Schema
-const ThoughtSchema = new Schema(
-  {
-    // We will have the following attributes for this
-    // ATTRIBUTES: String, Required, Must be between 1 and 280 characters
-    thoughtText: {
-      // We want the type to be a String
-      type: String,
-      // We want a requirement message
-      required: "Please input thought text!",
-
-      // NEED TO CONFIRM //
-      // At least 1 character
-      minlength: 1,
-      // At most 280 characters
-      maxlength: 280,
-      // END CONFIRM //
-    },
-    // ATTRIBUTES: Date, Default Value, Getter Method
-    createdAt: {
-      type: Date,
-      default: Date.now,
-      // Use a getter method to format timestamp on query
-      get: (createdAtVal) => dateFormat(createdAtVal),
-    },
-    // ATTRIBUTES: String, Required
-    username: {
-      // We want the type to be String
-      type: String,
-
-      // We want a requirement message
-      required: "Please provide a username!",
-    },
-    reactions: [reactionSchema],
-    // Array of nested documents created with the reactionSchema
+  getAllThoughts(req, res) {
+    Thoughts.find({})
+      .then((dbThoughtData) => res.json(dbThoughtData))
+      .catch((err) => {
+        console.log(err);
+        res.status(400).json(err);
+      });
   },
-  opts
-);
+  //get thought by ID
+  getThoughtById({ params }, res) {
+    Thoughts.findOne({ _id: params.id })
 
-// CREATE A VIRTUAL
-// reactionCount that retrieves the length of the thought's reactions array field on query
-ThoughtSchema.virtual("reactionCount").get(function () {
-  // Return the length of the reaction array field on query
-  return this.reactions.length;
-});
-const Thought = model("Thought", ThoughtSchema);
+      .then((dbThoughtData) => {
+        if (!dbThoughtData) {
+          res.status(404).json({ message: "No thought found with this id!" });
+          return;
+        }
+        res.json(dbThoughtData);
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(400).json(err);
+      });
+  },
 
-module.exports = Thought;
+  //update thought by id
+  //delete thought by id
+
+  removeThought({ params }, res) {
+    Thoughts.findOneAndDelete({ _id: params.thoughtId })
+      .then((deletedThought) => {
+        if (!deletedThought) {
+          return res.status(404).json({ message: "No thought with this id!" });
+        }
+        //removes thought from associated user
+        return User.findOneAndUpdate(
+          { _id: params.userId },
+          { $pull: { thoughts: params.thoughtId } },
+          { new: true }
+        );
+      })
+      .then((dbThoughtData) => {
+        if (!dbThoughtData) {
+          res.status(404).json({ message: "No user found with this id!" });
+          return;
+        }
+        res.json(dbThoughtData);
+      })
+      .catch((err) => res.json(err));
+  },
+};
+
+module.exports = thoughtController;
